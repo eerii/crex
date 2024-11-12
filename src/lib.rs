@@ -1,75 +1,92 @@
+use proc_macro::TokenStream;
+use quote::{format_ident, quote};
+use syn::{
+    parse::{Parse, ParseStream},
+    parse_macro_input,
+};
+
+struct Attr {
+    name: syn::Ident,
+}
+
+impl Parse for Attr {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(Self {
+            name: input.parse()?,
+        })
+    }
+}
+
+#[proc_macro_attribute]
+pub fn export(attr: TokenStream, item: TokenStream) -> TokenStream {
+    // Parse attributes to find the exported module name
+    let attr = parse_macro_input!(attr as Attr);
+    let attr_name = &attr.name;
+    let macro_name = format_ident!("export_{}", attr_name);
+    let mod_name = format_ident!("{}_exported", attr_name);
+
+    // Parse extern block
+    let mut functions = vec![];
+    let item = parse_macro_input!(item as syn::ItemForeignMod);
+    for item in &item.items {
+        if let syn::ForeignItem::Fn(func) = item {
+            let sig = &func.sig;
+            let name = &sig.ident;
+            let inputs = &sig.inputs;
+            // This only handles the simple cases
+            let input_names = inputs
+                .iter()
+                .filter_map(|arg| {
+                    let syn::FnArg::Typed(syn::PatType { pat, .. }) = arg else {
+                        return None;
+                    };
+                    let syn::Pat::Ident(syn::PatIdent { ident, .. }) = pat.as_ref() else {
+                        return None;
+                    };
+                    Some(ident)
+                })
+                .collect::<Vec<_>>();
+            let output = &sig.output;
+            functions.push(quote! {
+                // #[no_mangle]
+                pub unsafe fn #name(#inputs) #output {
+                    ::#attr_name::#name(#(#input_names),*)
+                }
+            });
+        }
+    }
+
+    // Create the exported macro
+    let export_macro = quote! {
+        #[macro_export]
+        macro_rules! #macro_name {
+            () => {
+                pub mod #mod_name {
+                    use core::ffi::{c_char, c_int, c_ulong};
+                    #(#functions)*
+                }
+            }
+        }
+    };
+
+    // Put everything together
+    let expanded = quote! {
+      #item
+      #export_macro
+    };
+    expanded.into()
+}
+
 #[cfg(test)]
 mod tests {
     use test_lib::*;
 
     #[test]
-    fn link_test() {
+    fn should_link() {
         unsafe {
             test();
-            test_args(1, 40i8);
+            test_args(1, 50i8);
             assert_eq!(test_ret(), 4);
         }
     }
 }
-
-//use proc_macro::TokenStream;
-//use quote::quote;
-//use syn::parse_macro_input;
-
-//#[proc_macro_attribute]
-//pub fn export(attr: TokenStream, item: TokenStream) -> TokenStream {
-//    let attr = parse_macro_input!(attr as ItemExtern);
-//    let item = parse_macro_input!(item as ItemExtern);
-//
-//    let mut expanded = quote! {};
-//
-//    for item in item.items {
-//        if let syn::ForeignItemFn(func) = item {
-//            let name = &func.sig.ident;
-//            let args = func
-//                .sig
-//                .inputs
-//                .iter()
-//                .map(|arg| {
-//                    if let syn::FnArg::Typed(pat) = arg {
-//                        let ty = &pat.ty;
-//                        quote!(#ty)
-//                    } else {
-//                        panic!("Unsupported argument type");
-//                    }
-//                })
-//                .collect::<Vec<_>>();
-//            let ret_ty = &func.sig.output;
-//
-//            expanded.extend(quote! {
-//                export_c_symbol!(fn #name(#(#args),*) #ret_ty);
-//            });
-//        }
-//    }
-//
-//    quote! {
-//        #item
-//        #expanded
-//    }
-//}
-
-// As a workaround for [rust-lang/rfcs#2771][2771], you can use this macro to
-// make sure the gstreamer-sys symbols are correctly exported in the `dylib`.
-// From https://github.com/Michael-F-Bryan/ffi_helpers.
-//#[doc(hidden)]
-//#[macro_export]
-//macro_rules! export_c_symbol {
-//    (fn $name:ident($( $arg:ident : $type:ty ),*) -> $ret:ty) => {
-//        #[no_mangle]
-//        pub unsafe extern "C" fn $name($( $arg : $type),*) -> $ret {
-//            gstreamer_sys_internal::$name($( $arg ),*)
-//        }
-//    };
-//    (fn $name:ident($( $arg:ident : $type:ty ),*)) => {
-//        export_c_symbol!(fn $name($( $arg : $type),*) -> ());
-//    }
-//}
-
-//export_c_symbol!(fn gst_buffer_remove_meta(buffer: *mut GstBuffer, meta: *mut GstMeta) -> gboolean);
-//export_c_symbol!(fn gst_element_class_add_metadata(klass: *mut GstElementClass, key: *const c_char, value: *const c_char));
-//export_c_symbol!(fn gst_element_class_set_metadata(klass: *mut GstElementClass, longname: *const c_char, classification: *const c_char, description: *const c_char, author: *const c_char));

@@ -1,0 +1,13 @@
+[package]
+name = "test_dylib"
+description = "Forces dynamic linking for test_internal"
+license = "MIT OR Apache-2.0"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = [ "dylib" ]
+
+[dependencies]
+test_internal = { path = "../internal", features = [ "export" ] }

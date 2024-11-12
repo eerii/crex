@@ -1,11 +1,14 @@
 [package]
 name = "test_lib"
+description = "A wrapper crate for the C bindings that can be used both dynamically and statically"
+license = "MIT OR Apache-2.0"
 version = "0.1.0"
 edition = "2021"
+publish = false
 
-[lib]
-# When using lib here the test works without any workarounds
-crate_type = [ "dylib" ]
+[dependencies]
+test_internal = { path = "./internal" }
+test_dylib = { path = "./dylib", optional = true }
 
-[build-dependencies]
-cc = "1.2"
+[features]
+dynamic = [ "dep:test_dylib" ]
