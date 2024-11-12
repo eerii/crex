@@ -1,0 +1,16 @@
+[package]
+name = "crex"
+description = "Procedural macro to export external C functions in a dylib"
+license = "MIT OR Apache-2.0"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote  = "1.0"
+syn = "2.0"
+
+[dev-dependencies]
+test_lib = { path = "./test_lib" }
