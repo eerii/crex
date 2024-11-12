@@ -17,3 +17,4 @@ test_lib = { path = "./test_lib" }
 
 [features]
 dynamic = [ "test_lib/dynamic" ]
+variadic = [ "test_lib/variadic" ]

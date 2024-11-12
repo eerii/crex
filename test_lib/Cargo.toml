@@ -12,3 +12,4 @@ test_dylib = { path = "./dylib", optional = true }
 
 [features]
 dynamic = [ "dep:test_dylib" ]
+variadic = [ "test_internal/variadic", "test_dylib?/variadic" ]
