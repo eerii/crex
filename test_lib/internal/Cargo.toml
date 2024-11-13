@@ -14,4 +14,3 @@ crex = { path = "../.." }
 
 [features]
 export = [ ]
-variadic = [ ]

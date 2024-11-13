@@ -59,7 +59,6 @@ dependencies = [
 name = "test_dylib"
 version = "0.1.0"
 dependencies = [
- "crex",
  "test_internal",
 ]
 

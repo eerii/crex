@@ -1,13 +1,8 @@
-#![cfg_attr(feature = "variadic", feature(c_variadic))]
-
 // Since the dylib crate will need the types that we use in the functions,
 // and it would be error prone to copy them there, we wrap them in a module
 // to export them. This way the crate's root isn't poluted.
 pub mod import {
     pub use std::ffi::{c_int, c_ulong};
-
-    #[cfg(feature = "variadic")]
-    pub use std::ffi::VaList;
 }
 use import::*;
 
@@ -24,8 +19,4 @@ extern "C" {
     pub fn test();
     pub fn test_args(a: c_int, b: c_int);
     pub fn test_ret() -> c_ulong;
-    #[cfg(feature = "variadic")]
-    pub fn test_variadic(n: c_int, ...) -> c_int;
-    #[cfg(feature = "variadic")]
-    pub fn test_variadic_valist(n: c_int, args: VaList) -> c_int;
 }

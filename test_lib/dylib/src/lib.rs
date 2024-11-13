@@ -1,5 +1,3 @@
-#![cfg_attr(feature = "variadic", feature(c_variadic))]
-
 extern crate test_internal;
 
 // We need the types of the function parameters.

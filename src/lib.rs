@@ -42,10 +42,9 @@ pub fn export(attr: TokenStream, items: TokenStream) -> TokenStream {
         let output = &sig.output;
 
         // TODO: Check visibility
-        // TODO: Lifetimes
 
         // This only handles the simple cases
-        let mut input_names = inputs
+        let input_names = inputs
             .iter()
             .filter_map(|arg| {
                 let syn::FnArg::Typed(syn::PatType { pat, .. }) = arg else {
@@ -61,40 +60,8 @@ pub fn export(attr: TokenStream, items: TokenStream) -> TokenStream {
         // Variadic arguments are hard!!! They require the unstable feature `c_variadic`.
         // Moreover, when using ..., we can't directly pass the arguments to a C function.
         // To mitigate this, we need to have a C function that accepts a `va_list`.
-        // We use the convention `fn_name_valist` to denote this function. See `funcs.c`
-        // for an example on how to set up the duo of functions.
+        // For now, we just skip them.
         if sig.variadic.is_some() {
-            if cfg!(not(feature = "variadic")) {
-                println!("Skipping `{}` as the `variadic` feature is disabled. Using it will cause a linking error.", name);
-                continue;
-            }
-
-            // Check if there is a valist function
-            let name_valist = format_ident!("{}_valist", name);
-            let mut has_valist = false;
-            for item in &items.items {
-                if let syn::ForeignItem::Fn(func) = item {
-                    if func.sig.ident == name_valist {
-                        has_valist = true;
-                        break;
-                    }
-                };
-            }
-            if !has_valist {
-                println!("There is no {} function defined. Because of a current limitation with Rust's dylibs, the varadic \
-                    function {} will not be available. Using it will cause a linking error.", name_valist, name);
-                continue;
-            }
-
-            let args = format_ident!("args");
-            input_names.push(&args);
-
-            functions.push(quote! {
-                #(#fattrs)* pub unsafe extern "C" fn #name(#inputs mut args: ...) #output {
-                    let args = args.as_va_list();
-                    self::#name_valist(#(#input_names),*)
-                }
-            });
             continue;
         };
 
@@ -151,10 +118,6 @@ mod tests {
             // Symbols outside the extern block
             other_function();
             assert_eq!(OTHER_CONSTANT, 256);
-
-            // Functions with variadic arguments
-            #[cfg(feature = "variadic")]
-            assert_eq!(test_variadic(5, 1, 2, 3, 4, 5), 15);
         }
     }
 }
