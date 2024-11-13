@@ -11,6 +11,7 @@ crate-type = [ "dylib" ]
 
 [dependencies]
 test_internal = { path = "../internal", features = [ "export" ] }
+crex = { path = "../..", optional = true }
 
 [features]
-variadic = [ "test_internal/variadic" ]
+variadic = [ "test_internal/variadic", "dep:crex" ]

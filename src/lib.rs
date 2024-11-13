@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use quote::{format_ident, quote, ToTokens};
+use quote::{format_ident, quote};
 use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input,
@@ -22,7 +22,7 @@ impl Parse for Attr {
 }
 
 #[proc_macro_attribute]
-pub fn export(attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn export(attr: TokenStream, items: TokenStream) -> TokenStream {
     // Parse attributes to find the crate and exported module name
     let attr = parse_macro_input!(attr as Attr);
     let krate = &attr.krate;
@@ -30,8 +30,8 @@ pub fn export(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Parse extern block
     let mut functions = vec![];
-    let mut item = parse_macro_input!(item as syn::ItemForeignMod);
-    for item in item.items.iter_mut() {
+    let items = parse_macro_input!(items as syn::ItemForeignMod);
+    for item in &items.items {
         let syn::ForeignItem::Fn(func) = item else {
             continue;
         };
@@ -42,17 +42,7 @@ pub fn export(attr: TokenStream, item: TokenStream) -> TokenStream {
         let output = &sig.output;
 
         // TODO: Check visibility
-
-        // Check if the functions attributes have some conditional compilation logic
-        // to exclude them from processing.
-        for attr in fattrs {
-            if attr.path().is_ident("cfg") {
-                let Ok(cfg) = attr.parse_args::<syn::Expr>() else {
-                    continue;
-                };
-                println!("cfg {}", cfg.into_token_stream());
-            }
-        }
+        // TODO: Lifetimes
 
         // This only handles the simple cases
         let mut input_names = inputs
@@ -68,20 +58,38 @@ pub fn export(attr: TokenStream, item: TokenStream) -> TokenStream {
             })
             .collect::<Vec<_>>();
 
-        // Variadic arguments are hard!!! They require the unstable feature `c_varadic`.
+        // Variadic arguments are hard!!! They require the unstable feature `c_variadic`.
         // Moreover, when using ..., we can't directly pass the arguments to a C function.
         // To mitigate this, we need to have a C function that accepts a `va_list`.
         // We use the convention `fn_name_valist` to denote this function. See `funcs.c`
         // for an example on how to set up the duo of functions.
         if sig.variadic.is_some() {
+            if cfg!(not(feature = "variadic")) {
+                println!("Skipping `{}` as the `variadic` feature is disabled. Using it will cause a linking error.", name);
+                continue;
+            }
+
+            // Check if there is a valist function
             let name_valist = format_ident!("{}_valist", name);
+            let mut has_valist = false;
+            for item in &items.items {
+                if let syn::ForeignItem::Fn(func) = item {
+                    if func.sig.ident == name_valist {
+                        has_valist = true;
+                        break;
+                    }
+                };
+            }
+            if !has_valist {
+                println!("There is no {} function defined. Because of a current limitation with Rust's dylibs, the varadic \
+                    function {} will not be available. Using it will cause a linking error.", name_valist, name);
+                continue;
+            }
+
             let args = format_ident!("args");
             input_names.push(&args);
 
             functions.push(quote! {
-                extern "C" {
-                    #(#fattrs)* pub fn #name_valist(#inputs var_args: std::ffi::VaList) #output;
-                }
                 #(#fattrs)* pub unsafe extern "C" fn #name(#inputs mut args: ...) #output {
                     let args = args.as_va_list();
                     self::#name_valist(#(#input_names),*)
@@ -110,7 +118,7 @@ pub fn export(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Put everything together
     let expanded = quote! {
-      #item
+      #items
       #export_macro
     };
     expanded.into()
@@ -132,12 +140,20 @@ mod tests {
     #[test]
     fn should_link() {
         unsafe {
+            // Debug information
             info();
+
+            // Reexported functions
             test();
             test_args(1, 2);
             assert_eq!(test_ret(), 4);
+
+            // Symbols outside the extern block
             other_function();
             assert_eq!(OTHER_CONSTANT, 256);
+
+            // Functions with variadic arguments
+            #[cfg(feature = "variadic")]
             assert_eq!(test_variadic(5, 1, 2, 3, 4, 5), 15);
         }
     }
